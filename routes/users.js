@@ -1,6 +1,7 @@
 var express = require('express');
 var router = express.Router();
-const sql = require('mssql')
+const sql = require('mssql');
+var createError = require('http-errors');
 
 const config = {
   user: 'malizia.fabio',  //Vostro user name
@@ -9,53 +10,49 @@ const config = {
   database: 'fmClashRoyale', //(Nome del DB)
 }
 
+//Function to connect to database and execute query
+let executeQuery = function (res, query, next) {
+  sql.connect(config, function (err) {
+    if (err) {
+      console.log("Error while connecting database :- " + err);
+      next(createError(500, "Internal server error")); //Display error page
+      return;
+    }
+    var request = new sql.Request(); // create Request object
+    request.query(query, function (err, result) { //Display error page
+      if (err) {
+        console.log("Error while querying database :- " + err);
+        next(createError(500, "Internal server error")); //On error
+        sql.close();
+        return;
+      }
+      res.send(result);
+      sql.close();
+    });
 
+  });
+}
 
 /* GET users listing. */
 router.get('/', function (req, res, next) {
-  sql.connect(config, err => {
-    if (err) console.log(err);  // ... error check
-
-    // Query
-    let sqlRequest = new sql.Request();  //Oggetto che serve a creare le query
-    sqlRequest.query('select * from dbo.[cr-unit-attributes]', (err, result) => {
-      if (err) console.log(err); // ... error checks
-      res.send(result);  //Invio il risultato
-    });
-  });
+  let sqlQuery = "select * from dbo.[cr-unit-attributes]";
+  executeQuery(res, sqlQuery, next);
 });
 
 router.get('/search/:name', function (req, res, next) {
-  sql.connect(config, err => {
-    // ... error check
-    if (err) console.log(err);
-    // Query
-    let sqlRequest = new sql.Request();
-    sqlRequest.query(`select * from dbo.[cr-unit-attributes] where Unit = '${req.params.name}'`, (err, result) => {
-      // ... error checks
-      if (err) console.log(err);
-      res.send(result);
-    });
-  });
+  let sqlQuery = `select * from dbo.[cr-unit-attributes] where Unit = '${req.params.name}'`;
+  executeQuery(res, sqlQuery, next);
 });
 
 router.post('/', function (req, res, next) {
-  console.log(req.body);
   // Add a new Unit  
   let unit = req.body;
-  if (!unit) {
-    return res.status(400).send({ error: true, message: 'Please provide a unit' });
+  if (!unit) {  //Qui dovremmo testare tutti i campi della richiesta
+    return next(createError(400, "Please provide a correct unit"));
   }
-  sql.connect(config, err => {
-    let sqlInsert = `INSERT INTO dbo.[cr-unit-attributes] (Unit,Cost,Hit_Speed) 
+  let sqlInsert = `INSERT INTO dbo.[cr-unit-attributes] (Unit,Cost,Hit_Speed) 
                      VALUES ('${unit.Unit}','${unit.Cost}','${unit.Hit_Speed}')`;
-    console.log(sqlInsert);
-    let sqlRequest = new sql.Request();
-    sqlRequest.query(sqlInsert, (error, results) => {
-      if (error) throw error;
-      return res.send({ error: false, data: results, message: 'New user has been created successfully.' });
-    });
-  })
+  executeQuery(res, sqlInsert, next);
 });
 
 module.exports = router;
